@@ -1,0 +1,350 @@
+---
+description: Git workflow rules
+globs:
+alwaysApply: true
+---
+# Git workflow rules
+
+## Command Execution Permissions
+
+**CRITICAL**: The AI assistant:
+1. Must NEVER change git status or stage files itself, as this is the developer's way of indicating which files are ready for commit messages
+
+# Git workflow rules for Cursor AI
+
+## Commit workflow
+
+### 1. Gathering information (REQUIRED)
+
+**CRITICAL**: This step is MANDATORY before creating any commit message. Do not skip this step!
+
+**NOTE**: These commands require user approval before execution.
+
+Always get all required information in one go using this combined command:
+
+```bash
+git branch --show-current && echo "---" && git tag -l | sort -V | tail -n 1 && echo "---" && git diff --staged | cat
+```
+
+This single command provides:
+- Current branch name (for ticket reference)
+- Latest tag version
+- All staged changes
+
+**CRITICAL**: Only include changes that are visible in the git diff output in your commit message. Do not add bullet points or references to:
+- Changes made during development but not present in the final diff
+- Refactoring steps that were later reverted
+- Temporary changes or debugging steps
+- Any work that isn't reflected in the actual code changes
+
+For specific file changes, you can also use:
+- `git diff <filename>` to see changes to a particular file
+
+#### Understanding the diff output
+
+Pay special attention to these indicators in the diff:
+- `new file mode` indicates a file creation, requiring "Add" in commit message
+- `deleted file mode` indicates a file deletion, requiring "Remove" in commit message
+- `rename from ... to ...` indicates a file rename, requiring "Rename" in commit message
+- `index 000000..abc123` with all '+' lines indicates a new file
+- `index abc123..000000` with all '-' lines indicates a file deletion
+- Regular changes show mixed '+' and '-' lines, requiring "Update" in commit message
+
+Always match your commit message verb with the type of change:
+- New file → "Add" or "Create"
+- Deleted file → "Remove" or "Delete"
+- Renamed file → "Rename" or "Move"
+- Modified file → "Update" or "Change"
+
+### 2. Analyzing changes
+
+Review the diff output to identify:
+- What functionality was added, modified, or removed
+- Which files were affected
+- The scope and impact of the changes
+
+Consider these factors when determining importance:
+- User-visible changes (e.g., site name, UI elements) are more significant than internal changes
+- Functional changes take precedence over style/formatting changes
+- Configuration changes affecting multiple components are more significant than isolated changes
+- Security and performance impacts increase a change's priority
+
+### 3. Commit message format
+
+Follow these rules for commit messages:
+- Use the format: `TICKET-REF: description`
+- The ticket number MUST be included at the start of the message
+- For branch names with follow-up indicators (e.g., `feature/ABC-123-2`), use only the base ticket number (e.g., `ABC-123`)
+- Use correct capitalization (only first word and proper nouns)
+- The description after the colon MUST start with a capital letter
+- Order changes by importance and impact
+- Group related minor changes into single bullet points
+- List most impactful files first in Refs section
+- Do not use @ prefix in file references in the Refs section
+
+The ticket number MUST be included at the start:
+- For JIRA tickets, use the project code and ticket number:
+  - `ABC-123`: Feature related to JIRA ticket ABC-123
+
+### 4. Creating the commit message
+
+**IMPORTANT**: Always put ONLY the commit message in a git code block for easy copying. Here's the standard format:
+
+```markdown
+TICKET-REF: Concise description of changes
+
+- most important change with hyphen for GitHub compatibility
+- second most important change
+- other changes grouped by related functionality
+
+Refs: most-impacted.file, other-changed.file
+```
+
+Examples:
+- For JIRA: `ABC-123: Description`
+
+Breaking change example:
+
+```markdown
+ABC-123: Change authentication API
+
+- removed deprecated authentication endpoints
+- implemented OAuth2 flow for all authentication requests
+- updated documentation for new authentication methods
+
+BREAKING CHANGE: clients using the old authentication API need to be updated
+
+Refs: auth.php, oauth.php, README.md
+```
+
+## Branch management
+
+### Branch naming
+
+This project uses a modified version of @WunderFlow branch naming conventions:
+
+- **Feature branches**: For new features and enhancements
+  - Format for JIRA tickets: `feature/[ticket-number]-descriptive_name`
+  - Example: `feature/ABC-123-adding_search_functionality`
+  - Format for GitHub issues (two options):
+    - `feature/#[issue-number]-descriptive_name`
+    - `feature/GH-[issue-number]-descriptive_name`
+  - Examples:
+    - `feature/#2-docs` (for GitHub issue #2 related to documentation)
+    - `feature/GH-1-description` (alternative format for GitHub issue #1)
+  - Always branch from `main`
+
+- **Epic branches**: For larger projects with multiple dependent features
+  - Format: `epic/[EpicName]`
+  - Feature branches within epics: `feature/[TICKET-EpicName]/[TICKET-featureInThisEpic]`
+  - Example: `feature/ABC-123-Authentication/ABC-456-Login` or `feature/GH-10-Authentication/GH-15-Login`
+  - Always branch epic from `main`
+  - Branch features from their epic branch
+
+- **Hotfix branches**: For urgent production fixes
+  - Format for JIRA tickets: `hotfix/[ticket-number]-descriptive_name`
+  - Example: `hotfix/ABC-456-fix_critical_error`
+  - Format for GitHub issues (two options):
+    - `hotfix/#[issue-number]-descriptive_name`
+    - `hotfix/GH-[issue-number]-descriptive_name`
+  - Examples:
+    - `hotfix/#15-auth_error`
+    - `hotfix/GH-15-auth_error`
+  - Always branch from `production`
+
+Main branch structure:
+- `test`: For showing new features to customers, testing
+- `main`: Integration/QA for next release and the starting point for any feature branch
+- `production`: Current production code
+
+### Merging strategy
+
+- Use merge requests/pull requests for all changes
+- Ensure CI passes before merging
+- Use squash merging when appropriate to maintain a clean history
+- Delete branches after merging
+
+## Git hooks
+
+At Wunder, we use Git hooks to enforce code quality and commit message standards:
+
+### Hook management tools
+
+- [Husky](https://github.com/typicode/husky) - Tool for managing Git hooks in JavaScript-based projects
+- [GrumPHP](https://github.com/phpro/grumphp) - Tool for managing Git hooks in PHP-based projects
+
+Both tools provide similar capabilities:
+- Run linters and tests before commits
+- Validate commit messages against our standards
+- Enforce code quality checks
+- Prevent pushing to protected branches
+
+### Unified approach
+
+To maintain consistency across projects, we strive to keep the pre-commit and commit-msg hooks as unified as possible between different hook implementations. This ensures that:
+
+1. Commit messages follow the same format regardless of project type
+2. Code quality standards are consistently applied
+3. Developers have a similar experience across different projects
+
+All hook configurations enforce the commit message format defined in this document.
+
+- Configure appropriate hook tool based on project requirements
+- Pre-commit hooks should:
+  - Run code linting
+  - Check for syntax errors
+  - Ensure coding standards compliance
+- Commit-msg hooks should:
+  - Validate commit message format
+  - Enforce ticket number prefix
+  - Check for conventional commit format
+
+## Pull requests
+
+### Creating pull request content
+
+When creating a pull request, follow these steps to generate a well-formatted description:
+
+1. Extract the ticket number from the current branch name:
+```bash
+# For JIRA tickets (removing any follow-up indicators like -2, -3, etc.)
+git branch --show-current | grep -o "[A-Z]\+-[0-9]\+" | sed 's/-[0-9]\+$//'
+# For GitHub issues with # format
+git branch --show-current | grep -o "#[0-9]\+" | sed 's/#/GH-/'
+# For GitHub issues with GH- format
+git branch --show-current | grep -o "GH-[0-9]\+"
+```
+
+2. Collect the commit messages from the current branch that aren't in the target branch:
+```bash
+git log $(git merge-base HEAD main)..HEAD --pretty=format:"- %h %s" | grep -v "Merge"
+```
+
+This command does two important things:
+- Includes the commit hash (%h) before each message, making them clickable in GitHub
+- Formats each commit as a bullet point for better readability
+
+3. Format the PR title and description in separate code blocks for easy copying, grouping commits by type:
+
+```bash
+# Generate the PR content
+# Try to extract JIRA ticket (removing any follow-up indicators like -2, -3, etc.)
+JIRA_TICKET=$(git branch --show-current | grep -o "[A-Z]\+-[0-9]\+" | sed 's/-[0-9]\+$//')
+# Try to extract GitHub issue with # format
+GH_TICKET_HASH=$(git branch --show-current | grep -o "#[0-9]\+" | sed 's/#/GH-/')
+# Try to extract GitHub issue with GH- format
+GH_TICKET_PREFIX=$(git branch --show-current | grep -o "GH-[0-9]\+")
+
+# Set the ticket reference
+if [ -n "$JIRA_TICKET" ]; then
+  TICKET=$JIRA_TICKET
+elif [ -n "$GH_TICKET_HASH" ]; then
+  TICKET=$GH_TICKET_HASH
+elif [ -n "$GH_TICKET_PREFIX" ]; then
+  TICKET=$GH_TICKET_PREFIX
+else
+  TICKET="TICKET-REFERENCE"
+fi
+
+# Get all commit messages in the current branch that aren't in main
+COMMITS=$(git log $(git merge-base HEAD main)..HEAD --pretty=format:"%h %s" | grep -v "Merge")
+
+# Handle PR title based on number of commits
+COMMIT_COUNT=$(echo "$COMMITS" | wc -l | tr -d ' ')
+
+if [ "$COMMIT_COUNT" -eq 1 ]; then
+  # If there's just one commit, use its message for the PR title
+  FIRST_COMMIT=$COMMITS
+  if [[ $FIRST_COMMIT == *"): "* ]]; then
+    # Extract title from commit message with scope
+    PR_TITLE=${FIRST_COMMIT#*): }
+  elif [[ $FIRST_COMMIT == *": "* ]]; then
+    # Extract title from commit message without scope but with type
+    PR_TITLE=${FIRST_COMMIT#*: }
+  else
+    # Otherwise use branch name as fallback
+    PR_TITLE=$(git branch --show-current | sed 's/feature\/[^-]*-//' | sed 's/-/ /g')
+  fi
+else
+  # With multiple commits, look at branch name and commit types
+  BRANCH_NAME=$(git branch --show-current | sed 's/feature\/[^-]*-//' | sed 's/-/ /g')
+
+  # Check if there's a dominant commit type
+  FEAT_COUNT=$(echo "$COMMITS" | grep -c "feat")
+  FIX_COUNT=$(echo "$COMMITS" | grep -c "fix")
+  DOCS_COUNT=$(echo "$COMMITS" | grep -c "docs")
+
+  if [ "$FEAT_COUNT" -gt "$FIX_COUNT" ] && [ "$FEAT_COUNT" -gt "$DOCS_COUNT" ]; then
+    PR_TITLE="Add ${BRANCH_NAME}"
+  elif [ "$FIX_COUNT" -gt "$FEAT_COUNT" ] && [ "$FIX_COUNT" -gt "$DOCS_COUNT" ]; then
+    PR_TITLE="Fix ${BRANCH_NAME}"
+  elif [ "$DOCS_COUNT" -gt "$FEAT_COUNT" ] && [ "$DOCS_COUNT" -gt "$FIX_COUNT" ]; then
+    PR_TITLE="Update documentation for ${BRANCH_NAME}"
+  else
+    PR_TITLE="${BRANCH_NAME}"
+  fi
+fi
+```
+
+Put the title in a separate code block for easy copying:
+
+```markdown
+TICKET-REFERENCE: Brief description of changes
+```
+
+Examples:
+- For JIRA: `ABC-123: Brief description of changes`
+- For GitHub: `#2: Brief description of changes`
+
+Put the description in a separate code block for easy copying:
+
+```markdown
+# Ticket [ABC-123 or #2]
+
+## Changes
+
+### Features
+- 123abcd ABC-123: Add search functionality to user dashboard
+- def456 ABC-124: Implement user preferences panel
+
+### Bug Fixes
+- 456efgh GH-15: Fix authentication error in API endpoints
+- 789abc GH-16: Resolve data loading issue in dashboard
+
+### Documentation
+- 789ijkl GH-7: Update deployment documentation
+- abc123 GH-8: Add API usage examples
+
+### Other Changes
+- bcd234 ABC-125: Improve code organization in auth module
+- cde345 GH-17: Fix formatting issues in CSS files
+- def456 ABC-126: Add unit tests for search functionality
+
+## Testing
+
+Environment: [Feature environment URL]
+
+Instructions:
+
+- [Step by step instructions to test the changes]
+```
+
+### Tag proposal
+
+After the PR description, provide the tag proposal separately:
+
+Current tag: X.Y.Z
+Proposed tag: X.Y.(Z+1)
+Type: [patch|minor|major]
+Rationale: Brief explanation of version bump
+
+Version bumping rules:
+- MAJOR (X.0.0): Incompatible API changes
+- MINOR (0.X.0): New backward-compatible functionality
+  - Use for 'feat' commits
+- PATCH (0.0.X): Backward-compatible fixes
+  - Use for 'fix' commits
+  - Use for security updates
+  - Use for documentation
+  - Use for performance improvements
+  - Use for refactoring
