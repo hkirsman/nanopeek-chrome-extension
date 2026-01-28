@@ -1,1 +1,1 @@
-# tweetify-chrome-extension
+# Tweetify Chrome Extension

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "News Gist (Tweetify)",
-  "version": "1.0",
-  "description": "Shift+Hover AI kokkuvõte",
+  "name": "Tweetify",
+  "version": "0.1.0",
+  "description": "Shift+Hover AI Summary",
   "permissions": ["activeTab"],
   "content_scripts": [
     {
