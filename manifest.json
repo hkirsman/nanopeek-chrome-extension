@@ -2,14 +2,22 @@
   "manifest_version": 3,
   "name": "Tweetify",
   "version": "0.1.0",
-  "description": "Shift+Hover AI Summary",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "css": ["styles.css"],
       "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["proxy.js"],
+      "world": "ISOLATED"
     }
   ]
 }

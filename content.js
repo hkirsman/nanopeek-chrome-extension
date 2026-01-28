@@ -1,6 +1,23 @@
-console.log("🚀 Tweetify AI (Language Aware): Ready!");
+console.log("🚀 Tweetify AI (Language Aware + Bridge): Ready!");
 
-// 1. Create the tooltip bubble.
+// Helper to talk to proxy.js -> background.js
+function fetchViaBackground(url) {
+    return new Promise((resolve, reject) => {
+        const requestId = Math.random().toString(36).substring(7);
+
+        const listener = (event) => {
+            if (event.source !== window || !event.data || event.data.type !== "GIST_FETCH_RESPONSE") return;
+            if (event.data.id !== requestId) return;
+
+            window.removeEventListener("message", listener);
+            event.data.success ? resolve(event.data.html) : reject(event.data.error);
+        };
+
+        window.addEventListener("message", listener);
+        window.postMessage({ type: "GIST_FETCH_REQUEST", url: url, id: requestId }, "*");
+    });
+}
+
 const tooltip = document.createElement('div');
 tooltip.id = 'gist-tooltip';
 document.body.appendChild(tooltip);
@@ -36,37 +53,52 @@ async function getSummarizer() {
 // 3. Fetching text and language.
 async function fetchLinkText(url) {
     try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Network response was not ok");
+        // Use bridge instead of direct fetch to bypass CORS issue.
+        const html = await fetchViaBackground(url);
 
-        const html = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, "text/html");
 
         // A) Detect language
-        let lang = doc.documentElement.lang || 'et'; // Default to Estonian
-        // Normalize (e.g. 'et-EE' -> 'et')
+        let lang = doc.documentElement.lang || 'en';
         lang = lang.split('-')[0].toLowerCase();
-
         console.log("🌍 Detected language:", lang);
 
-        // B) Find main content
-        const selectors = ['article', '.article-body', '.post-content', 'main', 'body'];
+        const selectors = [
+            '.article-body__item',
+            '.article-body',
+            '.c-article-body',
+            'article',
+            '.post-content',
+            'main',
+            'body'
+        ];
+
         let text = "";
 
         for (const selector of selectors) {
-            const element = doc.querySelector(selector);
-            if (element && element.innerText.length > 200) {
-                text = element.innerText
-                        .replace(/\s+/g, ' ')
-                        .slice(0, 2500);
-                break;
+            const container = doc.querySelector(selector);
+            if (container) {
+                // If it's a container, grab all paragraphs
+                const paragraphs = Array.from(container.querySelectorAll('p'));
+                if (paragraphs.length > 2) {
+                    text = paragraphs.map(p => p.innerText).join(' ');
+                    break;
+                }
+                // Fallback: just take the container text
+                else if (container.innerText.length > 200) {
+                     text = container.innerText;
+                     break;
+                }
             }
         }
 
-        if (!text) return null;
-
-        return { text, lang }; // Tagastame nüüd objekti!
+        if (text) {
+             // Clean up whitespace and limit length
+            text = text.replace(/\s+/g, ' ').slice(0, 2500);
+            return { text, lang };
+        }
+        return null;
 
     } catch (e) {
         console.error("Fetch Error:", e);
