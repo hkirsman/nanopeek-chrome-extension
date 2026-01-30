@@ -1,5 +1,19 @@
 console.log("🚀 Tweetify AI (Language Aware + Bridge): Ready!");
 
+// Language hint from URL when HTML/meta don't specify (e.g. .ee → et, .fi → fi).
+function getLangHintFromUrl(url) {
+    const hostname = (() => { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } })();
+    if (hostname.endsWith('.ee')) return 'et';
+    if (hostname.endsWith('.fi')) return 'fi';
+    return 'en';
+}
+
+function getLoadingMessage(lang) {
+    if (lang === 'et') return 'Teen kokkuvõtet...';
+    if (lang === 'fi') return 'Teen yhteenvedon...';
+    return 'Summarizing article...';
+}
+
 // Helper to talk to proxy.js -> background.js
 function fetchViaBackground(url) {
     return new Promise((resolve, reject) => {
@@ -59,10 +73,14 @@ async function fetchLinkText(url) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, "text/html");
 
-        // A) Detect language
-        let lang = doc.documentElement.lang || 'en';
-        lang = lang.split('-')[0].toLowerCase();
-        console.log("🌍 Detected language:", lang);
+        // A) Detect language: html lang, then meta tags, then URL hint (.ee/.fi), then default
+        const rawHtmlLang = doc.documentElement.getAttribute('lang');
+        const metaLocale = doc.querySelector('meta[property="og:locale"]')?.getAttribute('content');
+        const metaLang = doc.querySelector('meta[http-equiv="content-language"]')?.getAttribute('content');
+
+        let lang = rawHtmlLang || metaLocale || metaLang || '';
+        lang = (typeof lang === 'string' ? lang : '').split('-')[0].toLowerCase();
+        if (!lang) lang = getLangHintFromUrl(url);
 
         const selectors = [
             '.article-body__item',
@@ -127,7 +145,7 @@ document.addEventListener('mouseover', (e) => {
         const rect = link.getBoundingClientRect();
         tooltip.style.top = `${window.scrollY + rect.bottom + 10}px`;
         tooltip.style.left = `${window.scrollX + rect.left}px`;
-        tooltip.innerHTML = `<div class="gist-loading">✨ Reading article...</div>`;
+        tooltip.innerHTML = `<div class="gist-loading">✨ ${getLoadingMessage(getLangHintFromUrl(url))}</div>`;
         tooltip.classList.add('visible');
 
         // Fetch data.
@@ -147,11 +165,11 @@ document.addEventListener('mouseover', (e) => {
 
                 let promptPrefix = "";
                 if (data.lang === 'et') {
-                    promptPrefix = "Write a summary in Estonian. Highlight the key facts:\n\n";
-                    console.log("🇪🇪 In Estonian");
+                    promptPrefix = "Kirjuta kokkuvõte EESTI KEELES. Too välja peamised faktid:\n\n";
+                } else if (data.lang === 'fi') {
+                    promptPrefix = "Kirjoita yhteenveto SUOMEKSI. Korosta tärkeimmät faktit:\n\n";
                 } else {
                     promptPrefix = "Summarize this text in English:\n\n";
-                    console.log("🇺🇸 In English");
                 }
 
                 const inputText = promptPrefix + data.text;
@@ -159,7 +177,8 @@ document.addEventListener('mouseover', (e) => {
                 // Ask the AI for a summary.
                 const summary = await ai.summarize(inputText);
 
-                tooltip.innerHTML = `<span class="gist-title">AI Summary (${data.lang}):</span>${summary}`;
+                const langDisplay = data.lang.toUpperCase();
+                tooltip.innerHTML = `<span class="gist-title">NanoPeek (${langDisplay})</span>${summary}`;
             } catch (err) {
                 tooltip.innerHTML = `<div class="gist-error">❌ AI Error: ${err.message}</div>`;
             }
