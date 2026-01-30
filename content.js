@@ -126,25 +126,40 @@ async function fetchLinkText(url) {
 
 // 4. Main hover event.
 let hoverTimeout;
+let closeTimeout;
 
+// Help to decide "is the mouse over the tooltip?" when the close timer fires
+// and avoid hiding the tooltip while you're still on it.
+let lastMouseX = 0;
+let lastMouseY = 0;
+document.addEventListener('mousemove', (e) => { lastMouseX = e.clientX; lastMouseY = e.clientY; }, { passive: true });
+
+// 1. Mouse over link -> Start opening.
 document.addEventListener('mouseover', (e) => {
+    // If mouse is on tooltip, do nothing (keep it open).
+    if (tooltip.contains(e.target)) return;
+
     const link = e.target.closest('a');
 
+    // If not a link or Shift not held (shift only needed to open).
     if (!link || !e.shiftKey) {
-        tooltip.classList.remove('visible');
-        clearTimeout(hoverTimeout);
         return;
     }
 
+    // If we moved to a new link, cancel the previous close.
+    clearTimeout(closeTimeout);
     clearTimeout(hoverTimeout);
+
     hoverTimeout = setTimeout(async () => {
         const url = link.href;
         console.log("🤖 Analyzing link:", url);
 
-        // Show loading state.
+        // Position tooltip.
         const rect = link.getBoundingClientRect();
-        tooltip.style.top = `${window.scrollY + rect.bottom + 10}px`;
+        tooltip.style.top = `${window.scrollY + rect.bottom + 4}px`;
         tooltip.style.left = `${window.scrollX + rect.left}px`;
+
+        // Loading message.
         tooltip.innerHTML = `<div class="gist-loading">✨ ${getLoadingMessage(getLangHintFromUrl(url))}</div>`;
         tooltip.classList.add('visible');
 
@@ -173,11 +188,10 @@ document.addEventListener('mouseover', (e) => {
                 }
 
                 const inputText = promptPrefix + data.text;
-
                 // Ask the AI for a summary.
                 const summary = await ai.summarize(inputText);
-
                 const langDisplay = data.lang.toUpperCase();
+
                 tooltip.innerHTML = `<span class="gist-title">NanoPeek (${langDisplay})</span>${summary}`;
             } catch (err) {
                 tooltip.innerHTML = `<div class="gist-error">❌ AI Error: ${err.message}</div>`;
@@ -185,11 +199,54 @@ document.addEventListener('mouseover', (e) => {
         } else {
              tooltip.innerHTML = `<div class="gist-error">❌ AI model did not start.</div>`;
         }
-
-    }, 600);
+    }, 600); // 600ms peab hoidma shift+hover
 });
 
-document.addEventListener('mouseout', () => {
+// 2. Mouse leaves (from link OR tooltip).
+document.addEventListener('mouseout', (e) => {
+    const target = e.target;
+    // Where did the mouse go?
+    const related = e.relatedTarget;
+
+    // Check: Is mouse still in our system (link or tooltip)?
+    const isInsideLink = target.closest('a');
+    const isInsideTooltip = tooltip.contains(target);
+
+    // Where did the mouse move to?
+    const goingToTooltip = related && tooltip.contains(related);
+    const goingToLink = related && related.closest('a');
+
+    // IF:
+    // 1. Left link -> onto tooltip (keep open).
+    if (isInsideLink && goingToTooltip) {
+        clearTimeout(closeTimeout);
+        return;
+    }
+
+    // 2. Left tooltip -> back onto link (keep open).
+    if (isInsideTooltip && goingToLink) {
+        clearTimeout(closeTimeout);
+        return;
+    }
+
+    // 3. Moved INSIDE tooltip from one element to another (keep open).
+    if (isInsideTooltip && goingToTooltip) {
+        return;
+    }
+
+    // OTHERWISE: Close (with short delay).
+    // Don't open a new one if one was in progress.
     clearTimeout(hoverTimeout);
-    tooltip.classList.remove('visible');
+
+    closeTimeout = setTimeout(() => {
+        const r = tooltip.getBoundingClientRect();
+        const overTooltip = lastMouseX >= r.left && lastMouseX <= r.right && lastMouseY >= r.top && lastMouseY <= r.bottom;
+        if (!overTooltip) tooltip.classList.remove('visible');
+    }, 400);
+});
+
+// Keep tooltip open when mouse is on it; re-show if it was already closed.
+tooltip.addEventListener('mouseenter', () => {
+    clearTimeout(closeTimeout);
+    tooltip.classList.add('visible');
 });

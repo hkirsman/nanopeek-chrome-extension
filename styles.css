@@ -1,7 +1,6 @@
 #gist-tooltip {
   position: absolute;
   z-index: 2147483647;
-  /* Maksimaalne võimalik kiht */
   background: #1a1a1a;
   color: #ffffff;
   padding: 12px 16px;
@@ -11,7 +10,9 @@
   font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  pointer-events: none;
+  pointer-events: auto;
+  user-select: text;
+  cursor: text;
   opacity: 0;
   transition: opacity 0.2s ease-in-out;
   border: 1px solid #333;
