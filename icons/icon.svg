@@ -1,0 +1,27 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Definition of the "Nano" Gradient -->
+  <defs>
+    <linearGradient id="nanoGradient" x1="0" y1="128" x2="128" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4285F4"/> <!-- Google Blue -->
+      <stop offset="100%" stop-color="#DB4437"/> <!-- Slight Red/Purple hint -->
+    </linearGradient>
+    <linearGradient id="sparkleGradient" x1="20" y1="20" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+       <stop offset="0%" stop-color="#34A853"/> <!-- Green hint -->
+       <stop offset="50%" stop-color="#4285F4"/>
+       <stop offset="100%" stop-color="#A600FC"/> <!-- Purple -->
+    </linearGradient>
+  </defs>
+
+  <!-- The "Peek" Eye Shape (Outer) -->
+  <path d="M64 28C36 28 12 64 12 64C12 64 36 100 64 100C92 100 116 64 116 64C116 64 92 28 64 28Z" 
+        stroke="url(#nanoGradient)" 
+        stroke-width="12" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+
+  <!-- The "AI" Sparkle (Pupil) -->
+  <!-- A 4-pointed star representing AI intelligence -->
+  <path d="M64 42L69 59L86 64L69 69L64 86L59 69L42 64L59 59L64 42Z" 
+        fill="url(#sparkleGradient)"/>
+        
+</svg>
