@@ -14,7 +14,7 @@ No API keys, no cloud subscriptions, and complete privacy.
 
 *   **⚡ Zero Latency:** Uses `window.ai` / `window.Summarizer` (Gemini Nano) directly in the browser.
 *   **🔒 Private:** No browsing history is sent to external servers (OpenAI/Anthropic).
-*   **🌍 Language Aware:** Automatically detects if an article is in **Estonian** or **English** and summarizes in the correct language.
+*   **🌍 Language Aware:** Detects article language from page metadata and URL (any `lang` / `og:locale` / .ee / .fi). Summarizes in **Estonian**, **Finnish**, or **English** (other languages get an English summary).
 *   **🌉 Cross-Origin Support:** Custom "Bridge" architecture allows fetching summaries from any domain (works on Delfi, ERR, Postimees, CNN, etc.).
 *   **⌨️ Intent-Based:** Triggers only when holding `Shift` + Hover (prevents annoyance).
 
