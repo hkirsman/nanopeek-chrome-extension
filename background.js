@@ -1,4 +1,4 @@
-// Kuulame soove "proxy" skriptilt
+// Listen for requests from the proxy script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "FETCH_URL") {
 
@@ -14,6 +14,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message });
       });
 
-    return true; // See on vajalik async vastuse jaoks!
+    return true; // Required for async response
   }
 });
