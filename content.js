@@ -113,25 +113,58 @@ async function fetchLinkText(url) {
 
         let text = "";
 
-        for (const selector of selectors) {
-            const container = doc.querySelector(selector);
-            if (container) {
-                // If it's a container, grab all paragraphs
-                const paragraphs = Array.from(container.querySelectorAll('p'));
-                if (paragraphs.length > 2) {
-                    text = paragraphs.map(p => p.innerText).join(' ');
-                    break;
-                }
-                // Fallback: just take the container text
-                else if (container.innerText.length > 200) {
-                     text = container.innerText;
-                     break;
+        // --- STRATEGY 1: Ekspress / Delfi (Fragmented Layout) ---
+        // Only on Delfi domains: article body is split into <div class="fragment-html"> blocks.
+        const hostname = (() => { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } })();
+        const isDelfiDomain = hostname === 'ekspress.delfi.ee' || hostname.endsWith('.delfi.ee');
+        if (isDelfiDomain) {
+            const fragments = Array.from(doc.querySelectorAll('.fragment-html'));
+            if (fragments.length > 0) {
+                console.log("✅ Found Ekspress Delfi fragments:", fragments.length);
+                text = fragments
+                    .map(frag => frag.innerText)
+                    .join(' ');
+            }
+        }
+
+        // --- STRATEGY 2: Standard Container Search (Fallback) ---
+        // If Strategy 1 didn't work, look for standard containers.
+        if (!text) {
+            const selectors = [
+                '.article-body__item',
+                '.article-body',
+                '.c-article-body',     // Postimees
+                '.rus-article-body',   // Rus.Delfi
+                '.col-article',        // Generic wrapper often used in Delfi
+                'article',
+                '.post-content',
+                'main',
+                'body'
+            ];
+
+            for (const selector of selectors) {
+                const container = doc.querySelector(selector);
+                if (container) {
+                    // If it's a container, grab all paragraphs.
+                    const paragraphs = Array.from(container.querySelectorAll('p'));
+                    if (paragraphs.length > 2) {
+                        text = paragraphs.map(p => p.innerText).join(' ');
+                        break;
+                    }
+                    // Fallback: just take the container text.
+                    else if (container.innerText.length > 200) {
+                        text = container.innerText;
+                        break;
+                    }
                 }
             }
         }
 
+        // @TODO: Remove this after testing or add debug mode.
+        console.log("Text found:", text);
+
         if (text) {
-             // Clean up whitespace and limit length
+            // Clean up whitespace (remove double spaces/newlines) and limit length
             text = text.replace(/\s+/g, ' ').slice(0, 2500);
             return { text, lang };
         }
