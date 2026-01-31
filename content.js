@@ -18,17 +18,36 @@ function getLoadingMessage(lang) {
 function fetchViaBackground(url) {
     return new Promise((resolve, reject) => {
         const requestId = Math.random().toString(36).substring(7);
+        // Store the timeout ID.
+        let timeoutId;
 
         const listener = (event) => {
+            // Check if the message is for us
             if (event.source !== window || !event.data || event.data.type !== "GIST_FETCH_RESPONSE") return;
             if (event.data.id !== requestId) return;
 
+            // RESPONSE RECEIVED: Clean up everything
+            // Don't wait for the timeout anymore.
+            clearTimeout(timeoutId);
+            // Remove the listener.
             window.removeEventListener("message", listener);
-            event.data.success ? resolve(event.data.html) : reject(event.data.error);
+
+            event.data.success ? resolve(event.data.html) : reject(new Error(event.data.error));
         };
 
+        // Make the listener ready
         window.addEventListener("message", listener);
+
+        // Send the request
         window.postMessage({ type: "GIST_FETCH_REQUEST", url: url, id: requestId }, "*");
+
+        // SAFETY CHECK: If the response doesn't come in 5 seconds, terminate the process
+        timeoutId = setTimeout(() => {
+            console.log("Timeout: Server didn't respond in 5 seconds.");
+            // Remove the listener, to avoid memory leaks.
+            window.removeEventListener("message", listener);
+            reject(new Error("Timeout: Server didn't respond in 5 seconds."));
+        }, 5000);
     });
 }
 
