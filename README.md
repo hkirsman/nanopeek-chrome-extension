@@ -1,7 +1,7 @@
 # 👁️ NanoPeek - Chrome AI Link Previews
 
 **NanoPeek** is a lightweight Chrome Extension that generates instant
-3-bullet-point summaries of news articles when you hover over a link.
+3-bullet-point summaries of articles when you hover over a link.
 
 It runs **100% locally** using Chrome's built-in **Gemini Nano** model.
 No API keys, no cloud subscriptions, and complete privacy.
@@ -15,7 +15,7 @@ No API keys, no cloud subscriptions, and complete privacy.
 *   **⚡ Zero Latency:** Uses `window.ai` / `window.Summarizer` (Gemini Nano) directly in the browser.
 *   **🔒 Private:** No browsing history is sent to external servers (OpenAI/Anthropic).
 *   **🌍 Language Aware:** Detects article language from page metadata and URL (any `lang` / `og:locale` / .ee / .fi). Summarizes in **Estonian**, **Finnish**, or **English** (other languages get an English summary).
-*   **🌉 Cross-Origin Support:** Custom "Bridge" architecture allows fetching summaries from any domain (works on Delfi, ERR, Postimees, CNN, etc.).
+*   **🌉 Cross-Origin Support:** Custom "Bridge" architecture allows fetching summaries from any domain (works on BBC, CNN, Reuters, etc.).
 *   **⌨️ Intent-Based:** Triggers only when holding `Shift` + Hover (prevents annoyance).
 
 ## 🛠️ Prerequisites
@@ -32,20 +32,19 @@ Because this uses Chrome's experimental Built-in AI, you need a version of Chrom
 
 ## 📦 Installation
 
-1.  **Clone this repository:**
-    ```bash
-    git clone https://github.com/yourusername/nanopeek.git
-    ```
+1.  **Get the code** — either clone or download:
+    *   **Clone:** `git clone https://github.com/hkirsman/nanopeek-chrome-extension.git`
+    *   **Download:** [github.com/hkirsman/nanopeek-chrome-extension](https://github.com/hkirsman/nanopeek-chrome-extension)
 2.  Open Chrome and go to `chrome://extensions`.
 3.  Enable **Developer mode** (top right toggle).
 4.  Click **Load unpacked**.
-5.  Select the `nanopeek` folder.
+5.  Select the `nanopeek-chrome-extension` folder.
 
 ## 🚀 Usage
 
-1.  Go to a news site (e.g., [err.ee](https://err.ee) or [delfi.ee](https://delfi.ee)).
+1.  Go to a site (e.g., [BBC](https://www.bbc.com) or [CNN](https://www.cnn.com)).
 2.  Hold the **Shift** key.
-3.  **Hover** your mouse over a news headline.
+3.  **Hover** your mouse over a headline.
 4.  Wait ~600ms for the "✨ Reading article..." tooltip to appear.
 
 ## 🏗️ Architecture
@@ -54,7 +53,7 @@ This extension uses a specific architecture to bypass CORS (Cross-Origin Resourc
 
 *   **`content.js` (Main World):** Handles UI (Tooltip), detects `Shift` key, and communicates with the AI model (`window.Summarizer`).
 *   **`proxy.js` (Isolated World):** Acts as a middleman between the web page and the extension background.
-*   **`background.js`:** Performs the actual `fetch()` request to external news sites to retrieve article HTML.
+*   **`background.js`:** Performs the actual `fetch()` request to external sites to retrieve article HTML.
 
 ## 📝 License
 
