@@ -55,11 +55,18 @@ const tooltip = document.createElement('div');
 tooltip.id = 'gist-tooltip';
 document.body.appendChild(tooltip);
 
+const BASE_SHARED_CONTEXT = 'Summarize in the same language as the input. If the text is in Estonian, respond in Estonian. If Finnish, respond in Finnish. Otherwise respond in English.';
+
 let summarizerInstance = null;
 
-// 2. AI initialization.
-async function getSummarizer() {
-    if (summarizerInstance) return summarizerInstance;
+// 2. AI initialization. Pass linkTitle when the link is a question (title contains '?') to amend sharedContext.
+async function getSummarizer(linkTitle) {
+    const isQuestion = linkTitle && linkTitle.includes('?');
+    const sharedContext = isQuestion
+        ? `${BASE_SHARED_CONTEXT} Answer the question short and concise: ${linkTitle}`
+        : BASE_SHARED_CONTEXT;
+
+    if (!isQuestion && summarizerInstance) return summarizerInstance;
 
     try {
         if (!window.Summarizer) return null;
@@ -67,16 +74,22 @@ async function getSummarizer() {
         const available = await window.Summarizer.availability();
         if (available === 'no') return null;
 
-        console.log("⏳ Loading model...");
-        // We use 'key-points', which works best with your version
-        summarizerInstance = await window.Summarizer.create({
+        if (!isQuestion) console.log("⏳ Loading model...");
+        const summarizer = await window.Summarizer.create({
             type: 'key-points',
             format: 'plain-text',
-            length: 'short'
+            length: 'short',
+            sharedContext
         });
 
-        console.log("✅ Model loaded!");
-        return summarizerInstance;
+        if (!isQuestion) {
+            summarizerInstance = summarizer;
+            console.log("✅ Model loaded!");
+        }
+
+        console.log("Shared context:", sharedContext);
+
+        return summarizer;
     } catch (e) {
         console.error("AI Error:", e);
         return null;
@@ -204,7 +217,7 @@ document.addEventListener('mouseover', (e) => {
 
     hoverTimeout = setTimeout(async () => {
         const url = link.href;
-        console.log("🤖 Analyzing link:", url);
+        const linkTitle = link.textContent?.trim() || link.getAttribute('title') || '(no title)';
 
         // Position tooltip.
         const rect = link.getBoundingClientRect();
@@ -223,25 +236,10 @@ document.addEventListener('mouseover', (e) => {
             return;
         }
 
-        const ai = await getSummarizer();
+        const ai = await getSummarizer(linkTitle);
         if (ai) {
             try {
-                // --- LANGUAGE PROMPT MAGIC ---
-                // Since the Summarizer API is often English-centric, we "nudge" it
-                // by adding a clear instruction at the start of the text.
-
-                let promptPrefix = "";
-                if (data.lang === 'et') {
-                    promptPrefix = "Kirjuta kokkuvõte EESTI KEELES. Too välja peamised faktid:\n\n";
-                } else if (data.lang === 'fi') {
-                    promptPrefix = "Kirjoita yhteenveto SUOMEKSI. Korosta tärkeimmät faktit:\n\n";
-                } else {
-                    promptPrefix = "Summarize this text in English:\n\n";
-                }
-
-                const inputText = promptPrefix + data.text;
-                // Ask the AI for a summary.
-                const summary = await ai.summarize(inputText);
+                const summary = await ai.summarize(data.text);
                 const langDisplay = data.lang.toUpperCase();
 
                 tooltip.innerHTML = `<span class="gist-title">NanoPeek (${langDisplay})</span>${summary}`;
