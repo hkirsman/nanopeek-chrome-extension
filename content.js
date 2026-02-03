@@ -1,4 +1,4 @@
-console.log("🚀 Tweetify AI (Language Aware + Bridge): Ready!");
+console.log("👁️ NanoPeek: Ready!");
 
 // Language hint from URL when HTML/meta don't specify (e.g. .ee → et, .fi → fi).
 function getLangHintFromUrl(url) {
@@ -12,6 +12,30 @@ function getLoadingMessage(lang) {
     if (lang === 'et') return 'Teen kokkuvõtet...';
     if (lang === 'fi') return 'Teen yhteenvedon...';
     return 'Summarizing article...';
+}
+
+/**
+ * Article body selectors per domain. Fallback to default list.
+ */
+function getSelectorsForDomain(hostname) {
+    const h = (hostname || '').toLowerCase();
+    if (h === 'postimees.ee' || h.endsWith('.postimees.ee')) {
+        return ['article:first-of-type .article-body .article-body__item'];
+    }
+    if (h === 'delfi.ee' || h.endsWith('.delfi.ee')) {
+        return ['div.article:first-of-type .fragment-html'];
+    }
+    return [
+        '.article-body__item',
+        '.article-body',
+        '.c-article-body',
+        '.rus-article-body',
+        '.col-article',
+        'article',
+        '.post-content',
+        'main',
+        'body'
+    ];
 }
 
 // Helper to talk to proxy.js -> background.js
@@ -114,71 +138,39 @@ async function fetchLinkText(url) {
         lang = (typeof lang === 'string' ? lang : '').split('-')[0].toLowerCase();
         if (!lang) lang = getLangHintFromUrl(url);
 
-        const selectors = [
-            '.article-body__item',
-            '.article-body',
-            '.c-article-body',
-            'article',
-            '.post-content',
-            'main',
-            'body'
-        ];
-
         let text = "";
-
-        // --- STRATEGY 1: Ekspress / Delfi (Fragmented Layout) ---
-        // Only on Delfi domains: article body is split into <div class="fragment-html"> blocks.
         const hostname = (() => { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } })();
-        const isDelfiDomain = hostname === 'ekspress.delfi.ee' || hostname.endsWith('.delfi.ee');
-        if (isDelfiDomain) {
-            const fragments = Array.from(doc.querySelectorAll('.fragment-html'));
-            if (fragments.length > 0) {
-                console.log("✅ Found Ekspress Delfi fragments:", fragments.length);
-                text = fragments
-                    .map(frag => frag.innerText)
-                    .join(' ');
-            }
-        }
 
-        // --- STRATEGY 2: Standard Container Search (Fallback) ---
-        // If Strategy 1 didn't work, look for standard containers.
-        if (!text) {
-            const selectors = [
-                '.article-body__item',
-                '.article-body',
-                '.c-article-body',     // Postimees
-                '.rus-article-body',   // Rus.Delfi
-                '.col-article',        // Generic wrapper often used in Delfi
-                'article',
-                '.post-content',
-                'main',
-                'body'
-            ];
-
-            for (const selector of selectors) {
-                const container = doc.querySelector(selector);
-                if (container) {
-                    // If it's a container, grab all paragraphs.
-                    const paragraphs = Array.from(container.querySelectorAll('p'));
-                    if (paragraphs.length > 2) {
-                        text = paragraphs.map(p => p.innerText).join(' ');
-                        break;
-                    }
-                    // Fallback: just take the container text.
-                    else if (container.innerText.length > 200) {
-                        text = container.innerText;
-                        break;
-                    }
-                }
-            }
-        }
-
+        const selectors = getSelectorsForDomain(hostname);
         // @TODO: Remove this after testing or add debug mode.
-        console.log("Text found:", text);
+        console.log("🔍 Using selectors:", selectors);
+
+        for (const selector of selectors) {
+            const containers = Array.from(doc.querySelectorAll(selector));
+            if (containers.length === 0) continue;
+
+            // Collect all <p> from every matched container (handles many .article-body__item etc.)
+            const paragraphs = containers.flatMap(container =>
+                Array.from(container.querySelectorAll('p'))
+            );
+            if (paragraphs.length > 2) {
+                text = paragraphs.map(p => p.innerText).join('\n\n');
+                break;
+            }
+            const fullText = containers.map(c => c.innerText).join('\n\n');
+            if (fullText.length > 200) {
+                text = fullText;
+                break;
+            }
+        }
 
         if (text) {
-            // Clean up whitespace (remove double spaces/newlines) and limit length
-            text = text.replace(/\s+/g, ' ').slice(0, 2500);
+            // @TODO: Remove this after testing or add debug mode.
+            console.log("✅ Text found:", text);
+            // Collapse multiple spaces/tabs to one space; leave line breaks as-is
+            text = text.replace(/[ \t]+/g, ' ').slice(0, 2500);
+            // @TODO: Remove this after testing or add debug mode.
+            console.log("✅ Text after cleanup:", text);
             return { text, lang };
         }
         return null;
