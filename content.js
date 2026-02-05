@@ -1,6 +1,10 @@
 console.log("👁️ NanoPeek: Ready!");
 
-// Language hint from URL when HTML/meta don't specify (e.g. .ee → et, .fi → fi).
+// ==========================================
+// 1. CONFIG & HELPERS
+// ==========================================
+
+// Language hint from URL
 function getLangHintFromUrl(url) {
     const hostname = (() => { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } })();
     if (hostname.endsWith('.ee')) return 'et';
@@ -11,11 +15,12 @@ function getLangHintFromUrl(url) {
 function getLoadingMessage(lang) {
     if (lang === 'et') return 'Teen kokkuvõtet...';
     if (lang === 'fi') return 'Teen yhteenvedon...';
-    return 'Summarizing article...';
+    return 'Summarizing...';
 }
 
 /**
- * Article body selectors per domain. Fallback to default list.
+ * Article body selectors per domain.
+ * NOTE: This is your "Lightweight Readability" replacement.
  */
 function getSelectorsForDomain(hostname) {
     const h = (hostname || '').toLowerCase();
@@ -25,6 +30,7 @@ function getSelectorsForDomain(hostname) {
     if (h === 'delfi.ee' || h.endsWith('.delfi.ee')) {
         return ['div.article:first-of-type .fragment-html'];
     }
+    // Generic fallbacks
     return [
         '.article-body__item',
         '.article-body',
@@ -38,39 +44,62 @@ function getSelectorsForDomain(hostname) {
     ];
 }
 
-// Helper to talk to proxy.js -> background.js
+/**
+ * REFACTORED: Extracts text from ANY document object (current page or fetched HTML)
+ */
+function extractTextFromDoc(doc, url) {
+    let text = "";
+    const hostname = (() => { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } })();
+    const selectors = getSelectorsForDomain(hostname);
+
+    for (const selector of selectors) {
+        const containers = Array.from(doc.querySelectorAll(selector));
+        if (containers.length === 0) continue;
+
+        // Strategy 1: Look for paragraphs
+        const paragraphs = containers.flatMap(container =>
+            Array.from(container.querySelectorAll('p'))
+        );
+        if (paragraphs.length > 2) {
+            text = paragraphs.map(p => p.innerText).join('\n\n');
+            break;
+        }
+
+        // Strategy 2: Raw text if paragraphs fail
+        const fullText = containers.map(c => c.innerText).join('\n\n');
+        if (fullText.length > 200) {
+            text = fullText;
+            break;
+        }
+    }
+
+    if (text) {
+        // Cleanup: Collapse multiple spaces, limit length
+        // @TODO: Check how to split this for the summarizer.
+        return text.replace(/[ \t]+/g, ' ').slice(0, 20000); // Increased limit slightly
+    }
+    return null;
+}
+
+// Helper to talk to proxy.js -> background.js (Existing code)
 function fetchViaBackground(url) {
     return new Promise((resolve, reject) => {
         const requestId = Math.random().toString(36).substring(7);
-        // Store the timeout ID.
         let timeoutId;
 
         const listener = (event) => {
-            // Check if the message is for us
             if (event.source !== window || !event.data || event.data.type !== "GIST_FETCH_RESPONSE") return;
             if (event.data.id !== requestId) return;
-
-            // RESPONSE RECEIVED: Clean up everything
-            // Don't wait for the timeout anymore.
             clearTimeout(timeoutId);
-            // Remove the listener.
             window.removeEventListener("message", listener);
-
             event.data.success ? resolve(event.data.html) : reject(new Error(event.data.error));
         };
 
-        // Make the listener ready
         window.addEventListener("message", listener);
-
-        // Send the request
         window.postMessage({ type: "GIST_FETCH_REQUEST", url: url, id: requestId }, "*");
-
-        // SAFETY CHECK: If the response doesn't come in 5 seconds, terminate the process
         timeoutId = setTimeout(() => {
-            console.log("Timeout: Server didn't respond in 5 seconds.");
-            // Remove the listener, to avoid memory leaks.
             window.removeEventListener("message", listener);
-            reject(new Error("Timeout: Server didn't respond in 5 seconds."));
+            reject(new Error("Timeout: Server didn't respond."));
         }, 5000);
     });
 }
@@ -113,15 +142,13 @@ async function getSummarizer(linkTitle, lang) {
 
     try {
         if (!window.Summarizer) return null;
-
         const available = await window.Summarizer.availability();
         if (available === 'no') return null;
 
-        if (!isQuestion) console.log("⏳ Loading model...");
         const summarizer = await window.Summarizer.create({
             type: 'key-points',
-            format: 'plain-text',
-            length: 'short',
+            format: 'markdown', // Markdown looks better in page summary
+            length: 'medium',   // Medium is better for full pages
             sharedContext
         });
 
@@ -129,9 +156,6 @@ async function getSummarizer(linkTitle, lang) {
             summarizerByLang[lang] = summarizer;
             console.log("✅ Model loaded!");
         }
-
-        console.log("Shared context:", sharedContext);
-
         return summarizer;
     } catch (e) {
         console.error("AI Error:", e);
@@ -139,109 +163,60 @@ async function getSummarizer(linkTitle, lang) {
     }
 }
 
-// 3. Fetching text and language.
+// Fetch content for LINK HOVER
 async function fetchLinkText(url) {
     try {
-        // Use bridge instead of direct fetch to bypass CORS issue.
         const html = await fetchViaBackground(url);
-
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, "text/html");
 
-        // A) Detect language: html lang, then meta tags, then URL hint (.ee/.fi), then default
+        // Detect Language
         const rawHtmlLang = doc.documentElement.getAttribute('lang');
         const metaLocale = doc.querySelector('meta[property="og:locale"]')?.getAttribute('content');
-        const metaLang = doc.querySelector('meta[http-equiv="content-language"]')?.getAttribute('content');
-
-        let lang = rawHtmlLang || metaLocale || metaLang || '';
-        lang = (typeof lang === 'string' ? lang : '').split('-')[0].toLowerCase();
+        let lang = rawHtmlLang || metaLocale || '';
+        lang = lang.split('-')[0].toLowerCase();
         if (!lang) lang = getLangHintFromUrl(url);
 
-        let text = "";
-        const hostname = (() => { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } })();
+        // Extract Text using the Refactored Function
+        const text = extractTextFromDoc(doc, url);
 
-        const selectors = getSelectorsForDomain(hostname);
-        // @TODO: Remove this after testing or add debug mode.
-        console.log("🔍 Using selectors:", selectors);
+        console.log("fetchLinkText -> extractTextFromDoc:", text);
 
-        for (const selector of selectors) {
-            const containers = Array.from(doc.querySelectorAll(selector));
-            if (containers.length === 0) continue;
-
-            // Collect all <p> from every matched container (handles many .article-body__item etc.)
-            const paragraphs = containers.flatMap(container =>
-                Array.from(container.querySelectorAll('p'))
-            );
-            if (paragraphs.length > 2) {
-                text = paragraphs.map(p => p.innerText).join('\n\n');
-                break;
-            }
-            const fullText = containers.map(c => c.innerText).join('\n\n');
-            if (fullText.length > 200) {
-                text = fullText;
-                break;
-            }
-        }
-
-        if (text) {
-            // @TODO: Remove this after testing or add debug mode.
-            console.log("✅ Text found:", text);
-            // Collapse multiple spaces/tabs to one space; leave line breaks as-is
-            text = text.replace(/[ \t]+/g, ' ').slice(0, 2500);
-            // @TODO: Remove this after testing or add debug mode.
-            console.log("✅ Text after cleanup:", text);
-            return { text, lang };
-        }
-        return null;
-
+        return text ? { text, lang } : null;
     } catch (e) {
         console.error("Fetch Error:", e);
         return null;
     }
 }
 
-// 4. Main hover event.
-let hoverTimeout;
-let closeTimeout;
+// ==========================================
+// 3. UI: TOOLTIP (Hover)
+// ==========================================
 
-// Help to decide "is the mouse over the tooltip?" when the close timer fires
-// and avoid hiding the tooltip while you're still on it.
-let lastMouseX = 0;
-let lastMouseY = 0;
+let hoverTimeout, closeTimeout;
+let lastMouseX = 0, lastMouseY = 0;
+
 document.addEventListener('mousemove', (e) => { lastMouseX = e.clientX; lastMouseY = e.clientY; }, { passive: true });
 
-// 1. Mouse over link -> Start opening.
 document.addEventListener('mouseover', (e) => {
-    // If mouse is on tooltip, do nothing (keep it open).
     if (tooltip.contains(e.target)) return;
-
     const link = e.target.closest('a');
+    if (!link || !e.shiftKey) return;
 
-    // If not a link or Shift not held (shift only needed to open).
-    if (!link || !e.shiftKey) {
-        return;
-    }
-
-    // If we moved to a new link, cancel the previous close.
     clearTimeout(closeTimeout);
     clearTimeout(hoverTimeout);
 
     hoverTimeout = setTimeout(async () => {
         const url = link.href;
-        const linkTitle = link.textContent?.trim() || link.getAttribute('title') || '(no title)';
+        const linkTitle = link.textContent?.trim() || link.getAttribute('title');
 
-        // Position tooltip.
         const rect = link.getBoundingClientRect();
         tooltip.style.top = `${window.scrollY + rect.bottom + 4}px`;
         tooltip.style.left = `${window.scrollX + rect.left}px`;
-
-        // Loading message.
         tooltip.innerHTML = `<div class="gist-loading">✨ ${getLoadingMessage(getLangHintFromUrl(url))}</div>`;
         tooltip.classList.add('visible');
 
-        // Fetch data.
         const data = await fetchLinkText(url);
-
         if (!data) {
             tooltip.innerHTML = `<div class="gist-error">❌ No readable text found.</div>`;
             return;
@@ -251,54 +226,28 @@ document.addEventListener('mouseover', (e) => {
         if (ai) {
             try {
                 const summary = await ai.summarize(data.text);
-                const langDisplay = data.lang.toUpperCase();
-
-                tooltip.innerHTML = `<span class="gist-title">NanoPeek (${langDisplay})</span>${summary}`;
+                tooltip.innerHTML = `<span class="gist-title">NanoPeek (${data.lang.toUpperCase()})</span>${summary}`;
             } catch (err) {
                 tooltip.innerHTML = `<div class="gist-error">❌ AI Error: ${err.message}</div>`;
             }
-        } else {
-             tooltip.innerHTML = `<div class="gist-error">❌ AI model did not start.</div>`;
         }
-    }, 600); // 600ms peab hoidma shift+hover
+    }, 600);
 });
 
-// 2. Mouse leaves (from link OR tooltip).
 document.addEventListener('mouseout', (e) => {
     const target = e.target;
-    // Where did the mouse go?
     const related = e.relatedTarget;
-
-    // Check: Is mouse still in our system (link or tooltip)?
     const isInsideLink = target.closest('a');
     const isInsideTooltip = tooltip.contains(target);
-
-    // Where did the mouse move to?
     const goingToTooltip = related && tooltip.contains(related);
     const goingToLink = related && related.closest('a');
 
-    // IF:
-    // 1. Left link -> onto tooltip (keep open).
-    if (isInsideLink && goingToTooltip) {
+    if ((isInsideLink && goingToTooltip) || (isInsideTooltip && goingToLink) || (isInsideTooltip && goingToTooltip)) {
         clearTimeout(closeTimeout);
         return;
     }
 
-    // 2. Left tooltip -> back onto link (keep open).
-    if (isInsideTooltip && goingToLink) {
-        clearTimeout(closeTimeout);
-        return;
-    }
-
-    // 3. Moved INSIDE tooltip from one element to another (keep open).
-    if (isInsideTooltip && goingToTooltip) {
-        return;
-    }
-
-    // OTHERWISE: Close (with short delay).
-    // Don't open a new one if one was in progress.
     clearTimeout(hoverTimeout);
-
     closeTimeout = setTimeout(() => {
         const r = tooltip.getBoundingClientRect();
         const overTooltip = lastMouseX >= r.left && lastMouseX <= r.right && lastMouseY >= r.top && lastMouseY <= r.bottom;
@@ -306,8 +255,79 @@ document.addEventListener('mouseout', (e) => {
     }, 400);
 });
 
-// Keep tooltip open when mouse is on it; re-show if it was already closed.
-tooltip.addEventListener('mouseenter', () => {
-    clearTimeout(closeTimeout);
-    tooltip.classList.add('visible');
+// ==========================================
+// 4. UI: PAGE SUMMARY BUTTON
+// ==========================================
+
+// Create the floating button
+const pageBtn = document.createElement('div');
+pageBtn.id = 'nano-page-btn';
+pageBtn.innerHTML = '<span>✨</span>';
+pageBtn.title = "Summarize this page";
+document.body.appendChild(pageBtn);
+
+// Create the Modal for page summary
+const modal = document.createElement('div');
+modal.id = 'nano-page-modal';
+modal.innerHTML = `
+    <div class="nano-modal-content">
+        <div class="nano-header">
+            <h3>Page Summary</h3>
+            <button id="nano-close-btn">&times;</button>
+        </div>
+        <div id="nano-modal-body"></div>
+    </div>
+`;
+document.body.appendChild(modal);
+
+// Handle Page Button Click
+pageBtn.addEventListener('click', async () => {
+    const output = document.getElementById('nano-modal-body');
+    modal.classList.add('visible');
+    output.innerHTML = '<div class="gist-loading">Reading page content...</div>';
+
+    // 1. Get Text from CURRENT document
+    // We pass document and current URL
+    const text = extractTextFromDoc(document, window.location.href);
+
+    console.log("pageBtn.addEventListener -> extractTextFromDoc:", text);
+
+    if (!text) {
+        output.innerHTML = '<div class="gist-error">Could not find main article content on this page.</div>';
+        return;
+    }
+
+    output.innerHTML = `<div class="gist-loading">${getLoadingMessage('en')}</div>`;
+
+    // 2. Get AI
+    const ai = await getSummarizer(document.title);
+
+    if (ai) {
+        try {
+            // 3. Summarize
+            // Streaming is nicer for long page summaries if available, but let's stick to await for now
+            const summary = await ai.summarize(text);
+
+            // Convert simple markdown to HTML for display (optional, or just use pre-wrap)
+            // Simple formatter for bold and lists
+            const formatted = summary
+                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                .replace(/^\* /gm, '• ');
+
+            output.innerHTML = `<div style="white-space: pre-wrap; line-height: 1.6;">${formatted}</div>`;
+        } catch (err) {
+            output.innerHTML = `<div class="gist-error">AI Error: ${err.message}</div>`;
+        }
+    } else {
+        output.innerHTML = `<div class="gist-error">AI not available.</div>`;
+    }
+});
+
+// Close Modal Logic
+document.getElementById('nano-close-btn').addEventListener('click', () => {
+    modal.classList.remove('visible');
+});
+
+modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.remove('visible');
 });
