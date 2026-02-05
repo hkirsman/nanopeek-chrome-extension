@@ -269,25 +269,70 @@ pageBtn.title = 'Summarize this page';
 pageBtn.innerHTML = '<span>✨</span>';
 document.body.appendChild(pageBtn);
 
-// Create the Modal for page summary
+// Create the Modal for page summary (ARIA: dialog, labelledby, focus trap, Escape)
 const modal = document.createElement('div');
 modal.id = 'nano-page-modal';
+modal.setAttribute('role', 'dialog');
+modal.setAttribute('aria-modal', 'true');
+modal.setAttribute('aria-labelledby', 'nano-modal-title');
+modal.setAttribute('aria-hidden', 'true');
 modal.innerHTML = `
     <div class="nano-modal-content">
         <div class="nano-header">
-            <h3>Page Summary</h3>
-            <button id="nano-close-btn">&times;</button>
+            <h3 id="nano-modal-title">Page Summary</h3>
+            <button id="nano-close-btn" type="button" aria-label="Close">&times;</button>
         </div>
         <div id="nano-modal-body"></div>
     </div>
 `;
 document.body.appendChild(modal);
 
+const closeBtn = document.getElementById('nano-close-btn');
+
+function getModalFocusables() {
+    return Array.from(modal.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )).filter(el => !el.hasAttribute('disabled') && el.offsetParent !== null);
+}
+
+function closeModal() {
+    modal.classList.remove('visible');
+    modal.setAttribute('aria-hidden', 'true');
+    pageBtn.focus();
+}
+
+document.addEventListener('keydown', (e) => {
+    if (!modal.classList.contains('visible')) return;
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        closeModal();
+        return;
+    }
+    if (e.key !== 'Tab' || !modal.contains(document.activeElement)) return;
+    const focusables = getModalFocusables();
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey) {
+        if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        }
+    } else {
+        if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+});
+
 // Run page summary (shared by click and keyboard activation)
 async function openPageSummary() {
     const output = document.getElementById('nano-modal-body');
     modal.classList.add('visible');
+    modal.setAttribute('aria-hidden', 'false');
     output.innerHTML = '<div class="gist-loading">Reading page content...</div>';
+    closeBtn.focus();
 
     // 1. Get Text from CURRENT document
     // We pass document and current URL
@@ -338,10 +383,8 @@ pageBtn.addEventListener('keydown', (e) => {
 });
 
 // Close Modal Logic
-document.getElementById('nano-close-btn').addEventListener('click', () => {
-    modal.classList.remove('visible');
-});
+closeBtn.addEventListener('click', () => closeModal());
 
 modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.classList.remove('visible');
+    if (e.target === modal) closeModal();
 });
