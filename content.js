@@ -309,7 +309,9 @@ pageBtn.addEventListener('click', async () => {
             const summary = await ai.summarize(text);
 
             // Convert simple markdown to HTML for display (optional, or just use pre-wrap)
-            // Simple formatter for bold and lists
+            // Simple, intentionally limited formatter: the AI is instructed to only use
+            // **bold** text and `*` bullet lists in its output. Other markdown elements
+            // (headings, links, code blocks, etc.) are not expected and will be shown as plain text.
             const formatted = summary
                 .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
                 .replace(/^\* /gm, '• ');
