@@ -79,18 +79,37 @@ const tooltip = document.createElement('div');
 tooltip.id = 'gist-tooltip';
 document.body.appendChild(tooltip);
 
-const BASE_SHARED_CONTEXT = 'Summarize in the same language as the input. If the text is in Estonian, respond in Estonian. If Finnish, respond in Finnish. Otherwise respond in English.';
+/**
+ * Build shared-context prefix from detected language so the model summarizes in that language.
+ *
+ * @todo Not quite sure if this is working as expected. More testing needed.
+ */
+function getSharedContextPrefix(lang) {
+    const code = (lang || '').toLowerCase().split('-')[0];
+    if (code === 'et') return 'If the input language is Estonian, summarize in Estonian.';
+    if (code === 'fi') return 'If the input language is Finnish, summarize in Finnish.';
+    if (code === 'sv') return 'If the input language is Swedish, summarize in Swedish.';
+    if (code === 'no') return 'If the input language is Norwegian, summarize in Norwegian.';
+    if (code === 'da') return 'If the input language is Danish, summarize in Danish.';
+    if (code === 'nl') return 'If the input language is Dutch, summarize in Dutch.';
+    if (code === 'de') return 'If the input language is German, summarize in German.';
+    if (code === 'fr') return 'If the input language is French, summarize in French.';
+    if (code === 'es') return 'If the input language is Spanish, summarize in Spanish.';
+    if (code === 'it') return 'If the input language is Italian, summarize in Italian.';
+    return 'Summarize in English.';
+}
 
-let summarizerInstance = null;
+let summarizerByLang = {};
 
-// 2. AI initialization. Pass linkTitle when the link is a question (title contains '?') to amend sharedContext.
-async function getSummarizer(linkTitle) {
+// 2. AI initialization. Pass linkTitle when the link is a question (title contains '?') to amend sharedContext. Pass lang to set language-specific instruction.
+async function getSummarizer(linkTitle, lang) {
     const isQuestion = linkTitle && linkTitle.includes('?');
+    const prefix = getSharedContextPrefix(lang);
     const sharedContext = isQuestion
-        ? `${BASE_SHARED_CONTEXT} Answer the question short and concise: ${linkTitle}`
-        : BASE_SHARED_CONTEXT;
+        ? `${prefix} Answer the question short and concise: ${linkTitle}`
+        : prefix;
 
-    if (!isQuestion && summarizerInstance) return summarizerInstance;
+    if (!isQuestion && summarizerByLang[lang]) return summarizerByLang[lang];
 
     try {
         if (!window.Summarizer) return null;
@@ -107,7 +126,7 @@ async function getSummarizer(linkTitle) {
         });
 
         if (!isQuestion) {
-            summarizerInstance = summarizer;
+            summarizerByLang[lang] = summarizer;
             console.log("✅ Model loaded!");
         }
 
@@ -228,7 +247,7 @@ document.addEventListener('mouseover', (e) => {
             return;
         }
 
-        const ai = await getSummarizer(linkTitle);
+        const ai = await getSummarizer(linkTitle, data.lang);
         if (ai) {
             try {
                 const summary = await ai.summarize(data.text);
