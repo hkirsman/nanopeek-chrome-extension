@@ -259,11 +259,14 @@ document.addEventListener('mouseout', (e) => {
 // 4. UI: PAGE SUMMARY BUTTON
 // ==========================================
 
-// Create the floating button
+// Create the floating button (accessible: role, aria-label, tabindex, keyboard)
 const pageBtn = document.createElement('div');
 pageBtn.id = 'nano-page-btn';
+pageBtn.setAttribute('role', 'button');
+pageBtn.setAttribute('aria-label', 'Summarize this page');
+pageBtn.setAttribute('tabindex', '0');
+pageBtn.title = 'Summarize this page';
 pageBtn.innerHTML = '<span>✨</span>';
-pageBtn.title = "Summarize this page";
 document.body.appendChild(pageBtn);
 
 // Create the Modal for page summary
@@ -280,8 +283,8 @@ modal.innerHTML = `
 `;
 document.body.appendChild(modal);
 
-// Handle Page Button Click
-pageBtn.addEventListener('click', async () => {
+// Run page summary (shared by click and keyboard activation)
+async function openPageSummary() {
     const output = document.getElementById('nano-modal-body');
     modal.classList.add('visible');
     output.innerHTML = '<div class="gist-loading">Reading page content...</div>';
@@ -322,6 +325,15 @@ pageBtn.addEventListener('click', async () => {
         }
     } else {
         output.innerHTML = `<div class="gist-error">AI not available.</div>`;
+    }
+}
+
+pageBtn.addEventListener('click', () => openPageSummary());
+
+pageBtn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openPageSummary();
     }
 });
 
