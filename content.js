@@ -106,7 +106,7 @@ async function getSummarizer(linkTitle, lang) {
     const isQuestion = linkTitle && linkTitle.includes('?');
     const prefix = getSharedContextPrefix(lang);
     const sharedContext = isQuestion
-        ? `${prefix} Answer the question short and concise: ${linkTitle}`
+        ? `${prefix} Answer the question briefly and concisely: ${linkTitle}`
         : prefix;
 
     if (!isQuestion && summarizerByLang[lang]) return summarizerByLang[lang];
