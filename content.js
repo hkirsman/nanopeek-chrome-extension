@@ -12,15 +12,36 @@ function getLangHintFromUrl(url) {
     return 'en';
 }
 
+/** Detect language from a document (and optional URL fallback). Returns normalized code (e.g. "en"). */
+function getDetectedLang(doc, url, defaultLang = '') {
+    const htmlLang = doc.documentElement.getAttribute('lang');
+    const metaLocale = doc.querySelector('meta[property="og:locale"]')?.getAttribute('content');
+    let lang = htmlLang || metaLocale || '';
+    lang = (typeof lang === 'string' ? lang : '').split('-')[0].toLowerCase();
+    if (!lang) lang = url ? getLangHintFromUrl(url) : '';
+    if (!lang && defaultLang) lang = defaultLang;
+    return lang || '';
+}
+
 function getLoadingMessage(lang) {
     if (lang === 'et') return 'Teen kokkuvõtet...';
     if (lang === 'fi') return 'Teen yhteenvedon...';
     return 'Summarizing...';
 }
 
+function getModalTitle(lang) {
+    const code = (lang || '').toLowerCase().split('-')[0];
+    if (code === 'et') return 'Lehe kokkuvõte';
+    if (code === 'fi') return 'Sivun yhteenveto';
+    if (code === 'de') return 'Seitenzusammenfassung';
+    if (code === 'fr') return 'Résumé de la page';
+    if (code === 'es') return 'Resumen de la página';
+    if (code === 'sv') return 'Sidsammanfattning';
+    return 'Page Summary';
+}
+
 /**
  * Article body selectors per domain.
- * NOTE: This is your "Lightweight Readability" replacement.
  */
 function getSelectorsForDomain(hostname) {
     const h = (hostname || '').toLowerCase();
@@ -45,7 +66,7 @@ function getSelectorsForDomain(hostname) {
 }
 
 /**
- * REFACTORED: Extracts text from ANY document object (current page or fetched HTML)
+ * Extracts text from ANY document object (current page or fetched HTML)
  */
 function extractTextFromDoc(doc, url) {
     let text = "";
@@ -75,13 +96,34 @@ function extractTextFromDoc(doc, url) {
 
     if (text) {
         // Cleanup: Collapse multiple spaces, limit length
-        // @TODO: Check how to split this for the summarizer.
-        return text.replace(/[ \t]+/g, ' ').slice(0, 20000); // Increased limit slightly
+        return text.replace(/[ \t]+/g, ' ').slice(0, 20000);
     }
     return null;
 }
 
-// Helper to talk to proxy.js -> background.js (Existing code)
+/**
+ * Robust Markdown Parser (Better than simple replace)
+ */
+function simpleMarkdown(text) {
+    // 1. Handle Headers (### Header)
+    let html = text
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // 2. Handle Bold (**text**)
+    html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+
+    // 3. Handle Italics (*text*) - careful not to break lists
+    html = html.replace(/([^\\])\*([^\s\*].*?[^\s\*])\*/g, '$1<i>$2</i>');
+
+    // 4. Handle Lists (* Item or - Item)
+    html = html.replace(/^\s*[\-\*] /gm, '• ');
+
+    return html;
+}
+
+// Helper to talk to proxy.js -> background.js
 function fetchViaBackground(url) {
     return new Promise((resolve, reject) => {
         const requestId = Math.random().toString(36).substring(7);
@@ -108,29 +150,35 @@ const tooltip = document.createElement('div');
 tooltip.id = 'gist-tooltip';
 document.body.appendChild(tooltip);
 
-/**
- * Build shared-context prefix from detected language so the model summarizes in that language.
- *
- * @todo Not quite sure if this is working as expected. More testing needed.
- */
+// ==========================================
+// 2. AI & LOGIC
+// ==========================================
+
 function getSharedContextPrefix(lang) {
     const code = (lang || '').toLowerCase().split('-')[0];
-    if (code === 'et') return 'If the input language is Estonian, summarize in Estonian.';
-    if (code === 'fi') return 'If the input language is Finnish, summarize in Finnish.';
-    if (code === 'sv') return 'If the input language is Swedish, summarize in Swedish.';
-    if (code === 'no') return 'If the input language is Norwegian, summarize in Norwegian.';
-    if (code === 'da') return 'If the input language is Danish, summarize in Danish.';
-    if (code === 'nl') return 'If the input language is Dutch, summarize in Dutch.';
-    if (code === 'de') return 'If the input language is German, summarize in German.';
-    if (code === 'fr') return 'If the input language is French, summarize in French.';
-    if (code === 'es') return 'If the input language is Spanish, summarize in Spanish.';
-    if (code === 'it') return 'If the input language is Italian, summarize in Italian.';
-    return 'Summarize in English.';
+    if (code === 'et') return 'Kui sisendkeel on eesti keel, tee kokkuvõte eesti keeles.';
+    if (code === 'fi') return 'Jos syötekieli on suomi, tee yhteenveto suomeksi.';
+    if (code === 'sv') return 'Om inmatningsspråket är svenska, sammanfatta på svenska.';
+    if (code === 'no') return 'Hvis inndataspråket er norsk, oppsummer på norsk.';
+    if (code === 'da') return 'Hvis inputsproget er dansk, opsummer på dansk.';
+    if (code === 'nl') return 'Als de invoertaal Nederlands is, vat dan samen in het Nederlands.';
+    if (code === 'de') return 'Wenn die Eingabesprache Deutsch ist, fassen Sie auf Deutsch zusammen.';
+    if (code === 'fr') return 'Si la langue d\'entrée est le français, résumez en français.';
+    if (code === 'es') return 'Si el idioma de entrada es el español, resume en español.';
+    if (code === 'it') return 'Se la lingua di input è l\'italiano, riassumi in italiano.';
+    return 'If the input language is not English, summarize in English.';
+}
+
+/** Map our lang code to Summarizer API supported output languages: en, es, ja. */
+function getSummarizerOutputLanguage(lang) {
+    const code = (lang || '').toLowerCase().split('-')[0];
+    if (code === 'es') return 'es';
+    if (code === 'ja') return 'ja';
+    return 'en';
 }
 
 let summarizerByLang = {};
 
-// 2. AI initialization. Pass linkTitle when the link is a question (title contains '?') to amend sharedContext. Pass lang to set language-specific instruction.
 async function getSummarizer(linkTitle, lang) {
     const isQuestion = linkTitle && linkTitle.includes('?');
     const prefix = getSharedContextPrefix(lang);
@@ -138,23 +186,27 @@ async function getSummarizer(linkTitle, lang) {
         ? `${prefix} Answer the question briefly and concisely: ${linkTitle}`
         : prefix;
 
+    // Use cached instance only if not a question
     if (!isQuestion && summarizerByLang[lang]) return summarizerByLang[lang];
 
     try {
         if (!window.Summarizer) return null;
-        const available = await window.Summarizer.availability();
-        if (available === 'no') return null;
 
+        const outputLanguage = getSummarizerOutputLanguage(lang);
+
+        console.log('sharedContext', sharedContext);
         const summarizer = await window.Summarizer.create({
             type: 'key-points',
-            format: 'markdown', // Markdown looks better in page summary
-            length: 'medium',   // Medium is better for full pages
-            sharedContext
+            // Markdown looks better in page summary.
+            format: 'markdown',
+             // Medium is better for full pages.
+            length: 'medium',
+            sharedContext,
         });
 
         if (!isQuestion) {
             summarizerByLang[lang] = summarizer;
-            console.log("✅ Model loaded!");
+            console.log(`✅ Model loaded for lang: ${lang}`);
         }
         return summarizer;
     } catch (e) {
@@ -170,18 +222,8 @@ async function fetchLinkText(url) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, "text/html");
 
-        // Detect Language
-        const rawHtmlLang = doc.documentElement.getAttribute('lang');
-        const metaLocale = doc.querySelector('meta[property="og:locale"]')?.getAttribute('content');
-        let lang = rawHtmlLang || metaLocale || '';
-        lang = lang.split('-')[0].toLowerCase();
-        if (!lang) lang = getLangHintFromUrl(url);
-
-        // Extract Text using the Refactored Function
+        const lang = getDetectedLang(doc, url);
         const text = extractTextFromDoc(doc, url);
-
-        console.log("fetchLinkText -> extractTextFromDoc:", text);
-
         return text ? { text, lang } : null;
     } catch (e) {
         console.error("Fetch Error:", e);
@@ -226,7 +268,8 @@ document.addEventListener('mouseover', (e) => {
         if (ai) {
             try {
                 const summary = await ai.summarize(data.text);
-                tooltip.innerHTML = `<span class="gist-title">NanoPeek (${data.lang.toUpperCase()})</span>${summary}`;
+                const formatted = simpleMarkdown(summary);
+                tooltip.innerHTML = `<span class="gist-title">NanoPeek (${data.lang.toUpperCase()})</span>${formatted}`;
             } catch (err) {
                 tooltip.innerHTML = `<div class="gist-error">❌ AI Error: ${err.message}</div>`;
             }
@@ -335,34 +378,27 @@ async function openPageSummary() {
     closeBtn.focus();
 
     // 1. Get Text from CURRENT document
-    // We pass document and current URL
     const text = extractTextFromDoc(document, window.location.href);
-
-    console.log("pageBtn.addEventListener -> extractTextFromDoc:", text);
 
     if (!text) {
         output.innerHTML = '<div class="gist-error">Could not find main article content on this page.</div>';
         return;
     }
 
-    output.innerHTML = `<div class="gist-loading">${getLoadingMessage('en')}</div>`;
+    const pageLang = getDetectedLang(document, window.location.href, 'en');
+    document.getElementById('nano-modal-title').textContent = getModalTitle(pageLang);
 
-    // 2. Get AI
-    const ai = await getSummarizer(document.title);
+    output.innerHTML = `<div class="gist-loading">${getLoadingMessage(pageLang)}</div>`;
+
+    const ai = await getSummarizer(document.title, pageLang);
 
     if (ai) {
         try {
             // 3. Summarize
-            // Streaming is nicer for long page summaries if available, but let's stick to await for now
             const summary = await ai.summarize(text);
 
-            // Convert simple markdown to HTML for display (optional, or just use pre-wrap)
-            // Simple, intentionally limited formatter: the AI is instructed to only use
-            // **bold** text and `*` bullet lists in its output. Other markdown elements
-            // (headings, links, code blocks, etc.) are not expected and will be shown as plain text.
-            const formatted = summary
-                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                .replace(/^\* /gm, '• ');
+            // Use the robust markdown parser
+            const formatted = simpleMarkdown(summary);
 
             output.innerHTML = `<div style="white-space: pre-wrap; line-height: 1.6;">${formatted}</div>`;
         } catch (err) {
@@ -382,7 +418,6 @@ pageBtn.addEventListener('keydown', (e) => {
     }
 });
 
-// Close Modal Logic
 closeBtn.addEventListener('click', () => closeModal());
 
 modal.addEventListener('click', (e) => {
