@@ -199,7 +199,7 @@ async function getSummarizer(linkTitle, lang) {
             type: 'key-points',
             // Markdown looks better in page summary.
             format: 'markdown',
-             // Medium is better for full pages.
+            // Medium is better for full pages.
             length: 'medium',
             sharedContext,
         });
