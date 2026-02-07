@@ -268,13 +268,20 @@ document.addEventListener('mouseover', (e) => {
         if (ai) {
             try {
                 const summary = await ai.summarize(data.text);
-                const formatted = simpleMarkdown(summary);
-                tooltip.innerHTML = `<span class="gist-title">NanoPeek (${data.lang.toUpperCase()})</span>${formatted}`;
+                tooltip.innerHTML = `<span class="gist-title">NanoPeek (${data.lang.toUpperCase()})</span>`;
+                const summaryContainer = document.createElement('div');
+                summaryContainer.className = 'gist-summary';
+                summaryContainer.textContent = summary;
+                tooltip.appendChild(summaryContainer);
             } catch (err) {
-                tooltip.innerHTML = `<div class="gist-error">❌ AI Error: ${err.message}</div>`;
+                tooltip.innerHTML = '<div class="gist-error"></div>';
+                const errorEl = tooltip.querySelector('.gist-error');
+                if (errorEl) errorEl.textContent = `❌ AI Error: ${err.message}`;
             }
         } else {
-            tooltip.innerHTML = `<div class="gist-error">❌ AI model unavailable.</div>`;
+            tooltip.innerHTML = '<div class="gist-error"></div>';
+            const errorEl = tooltip.querySelector('.gist-error');
+            if (errorEl) errorEl.textContent = '❌ AI model unavailable.';
         }
     }, 600);
 });
