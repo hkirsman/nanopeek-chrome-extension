@@ -273,6 +273,8 @@ document.addEventListener('mouseover', (e) => {
             } catch (err) {
                 tooltip.innerHTML = `<div class="gist-error">❌ AI Error: ${err.message}</div>`;
             }
+        } else {
+            tooltip.innerHTML = `<div class="gist-error">❌ AI model unavailable.</div>`;
         }
     }, 600);
 });
