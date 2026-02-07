@@ -425,6 +425,7 @@ async function openPageSummary() {
 pageBtn.addEventListener('click', () => openPageSummary());
 
 pageBtn.addEventListener('keydown', (e) => {
+    if (!pageBtn.contains(e.target)) return;
     if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         openPageSummary();
