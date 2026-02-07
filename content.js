@@ -411,10 +411,14 @@ async function openPageSummary() {
 
             output.innerHTML = `<div style="white-space: pre-wrap; line-height: 1.6;">${formatted}</div>`;
         } catch (err) {
-            output.innerHTML = `<div class="gist-error">AI Error: ${err.message}</div>`;
+            output.innerHTML = '<div class="gist-error"></div>';
+            const errorEl = output.querySelector('.gist-error');
+            if (errorEl) errorEl.textContent = `AI Error: ${err.message}`;
         }
     } else {
-        output.innerHTML = `<div class="gist-error">AI not available.</div>`;
+        output.innerHTML = '<div class="gist-error"></div>';
+        const errorEl = output.querySelector('.gist-error');
+        if (errorEl) errorEl.textContent = 'AI not available.';
     }
 }
 
