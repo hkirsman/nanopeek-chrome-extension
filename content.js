@@ -115,7 +115,7 @@ function simpleMarkdown(text) {
     html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
     // 3. Handle Italics (*text*) - careful not to break lists
-    html = html.replace(/([^\\])\*([^\s\*].*?[^\s\*])\*/g, '$1<i>$2</i>');
+    html = html.replace(/(^|[^\\])\*([^\s\*].*?[^\s\*])\*/g, '$1<i>$2</i>');
 
     // 4. Handle Lists (* Item or - Item)
     html = html.replace(/^\s*[\-\*] /gm, '• ');
@@ -199,7 +199,7 @@ async function getSummarizer(linkTitle, lang) {
             type: 'key-points',
             // Markdown looks better in page summary.
             format: 'markdown',
-             // Medium is better for full pages.
+            // Medium is better for full pages.
             length: 'medium',
             sharedContext,
         });
